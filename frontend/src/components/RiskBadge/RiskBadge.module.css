@@ -1,0 +1,29 @@
+.badge {
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.red {
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+
+.teal {
+  background: var(--teal-bg);
+  color: var(--teal);
+  border: 1px solid var(--teal);
+}
+
+.orange {
+  background: var(--orange-bg);
+  color: var(--orange);
+  border: 1px solid var(--orange);
+}

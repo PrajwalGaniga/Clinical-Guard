@@ -1,0 +1,221 @@
+.container {
+  /* Only render Mentor when explicitly called in AppShell */
+}
+
+/* Floating button */
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--accent-purple);
+  color: #fff;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  z-index: 999;
+  animation: pulse 3s infinite alternate;
+  border: none;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+  100% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
+}
+
+/* Chat Panel */
+.chatPanel {
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  width: 340px;
+  height: 460px;
+  background-color: var(--bg-card);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.header {
+  padding: 12px 16px;
+  background-color: rgba(139, 92, 246, 0.1);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.onlineDot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-teal);
+  border-radius: 50%;
+}
+
+.closeBtn {
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.closeBtn:hover {
+  color: var(--text-primary);
+}
+
+.body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Messages */
+.message {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.msgUser {
+  align-self: flex-end;
+  background-color: var(--accent-blue);
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+
+.msgBot {
+  align-self: flex-start;
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border-bottom-left-radius: 2px;
+  border: 1px solid var(--border-color);
+}
+
+.geminiBadge {
+  font-size: 10px;
+  color: var(--accent-purple);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Quick Actions */
+.chipsContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.chip {
+  background-color: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chip:hover {
+  background-color: rgba(139, 92, 246, 0.2);
+}
+
+.showChipsBtn {
+  font-size: 10px;
+  color: var(--accent-purple);
+  text-align: center;
+  margin-top: auto;
+  cursor: pointer;
+}
+
+.showChipsBtn:hover {
+  text-decoration: underline;
+}
+
+/* Input Area */
+.inputArea {
+  display: flex;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card);
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent-purple);
+}
+
+.sendBtn {
+  background-color: var(--accent-purple);
+  color: #fff;
+  border-radius: 6px;
+  padding: 0 16px;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.sendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.typingIndicator {
+  display: flex;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 12px 14px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  border-bottom-left-radius: 2px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--text-secondary);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.dot:nth-child(1) { animation-delay: -0.32s; }
+.dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}

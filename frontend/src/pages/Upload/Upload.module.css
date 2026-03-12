@@ -1,0 +1,126 @@
+.container { animation: fadeIn 0.3s ease; }
+.header { margin-bottom: 24px; }
+.title { font-family: var(--font-display); font-size: 28px; font-weight: 800; color: var(--text-1); }
+.subtitle { font-size: 14px; color: var(--text-3); margin-top: 4px; }
+.error { color: var(--red); background: var(--red-bg); padding: 16px; border-radius: var(--r-md); text-align: center; border: 1px solid var(--red); margin-bottom: 24px; }
+
+.warningBanner {
+  background: var(--orange-bg);
+  border: 1px solid var(--orange);
+  color: var(--orange);
+  padding: 16px;
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.warnIcon { font-size: 24px; }
+
+.uploadCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.dropzone {
+  position: relative;
+  background: var(--bg-base);
+  border: 2px dashed var(--border);
+  border-radius: var(--r-md);
+  padding: 48px;
+  text-align: center;
+  transition: all 0.2s;
+}
+.dropzone:hover { border-color: var(--blue); background: var(--blue-bg); }
+
+.fileInput {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dropzoneContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+.dropIcon { font-size: 32px; }
+
+.fileInfo { display: flex; flex-direction: column; gap: 4px; }
+.fileName { color: var(--text-1); font-weight: 600; }
+.fileSize { font-size: 12px; color: var(--text-4); }
+
+.uploadBtn {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  height: 48px;
+  border-radius: var(--r-md);
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.uploadBtn:hover:not(:disabled) { background: #2563EB; box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+.uploadBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.progressArea { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; text-align: center; }
+.progressTrack { height: 6px; background: var(--bg-input); border-radius: 99px; overflow: hidden; }
+.progressFill { height: 100%; width: 50%; background: var(--blue); animation: loadBar 2s infinite ease-in-out; }
+@keyframes loadBar { 0% { width: 0%; transform: translateX(-100%); } 100% { width: 100%; transform: translateX(100%); } }
+.progressText { font-size: 13px; color: var(--text-3); font-weight: 600; }
+
+.summaryStrip {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 16px 24px;
+  border-radius: var(--r-md);
+  margin-bottom: 24px;
+}
+.sumItem { font-size: 14px; color: var(--text-1); }
+.sumTeal { color: var(--teal); }
+.sumRed { color: var(--red); }
+.sumOrange { color: var(--orange); }
+
+.resultsArea { display: flex; flex-direction: column; gap: 16px; }
+.tableHeader { display: flex; justify-content: space-between; align-items: center; }
+.tableTitle { font-size: 16px; font-weight: 700; color: var(--text-1); }
+.dlFlaggedBtn { background: var(--red-bg); border: 1px solid var(--red); color: var(--red); padding: 8px 16px; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; cursor: pointer; }
+.dlFlaggedBtn:hover:not(:disabled) { background: var(--red); color: #fff; }
+.dlFlaggedBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.tableWrap {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+}
+
+.table { width: 100%; border-collapse: collapse; min-width: 800px; text-align: left; }
+.table th { padding: 16px; font-size: 11px; text-transform: uppercase; color: var(--text-4); border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+.tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+.tr:last-child { border-bottom: none; }
+.tr td { padding: 16px; vertical-align: middle; font-size: 13px; color: var(--text-2); }
+
+.rowAuth:hover { background: var(--teal-bg); }
+.rowManip:hover { background: var(--red-bg); }
+
+.mono { font-family: var(--font-mono); color: var(--text-3); }
+.subText { font-size: 11px; color: var(--text-4); }
+
+.tagAuth, .tagManip { padding: 4px 8px; border-radius: var(--r-sm); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.tagAuth { background: var(--teal-bg); color: var(--teal); border: 1px solid var(--teal); }
+.tagManip { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }

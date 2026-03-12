@@ -1,0 +1,32 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.db
+.ipynb_checkpoints
+models/*.pkl
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+*.log
+.DS_Store
+
+# ClinicalGuard specific
+tmp_scratchpad.md
+*.csv
+!sample_batch_upload.csv
+!clinicalguard_template.csv
+api_test_results.txt
+import_errors.txt
