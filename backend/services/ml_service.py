@@ -83,3 +83,43 @@ def predict(record: dict) -> dict:
         "risk_level":             risk_level,
         "blockchain_action":      blockchain_action,
     }
+
+
+def verify_model_working():
+    """
+    Run two known test records through the model at startup.
+    Prints results so you can immediately confirm the model works correctly.
+    Call this inside the FastAPI lifespan startup event.
+    """
+    test_authentic = {
+        "age": 35, "bp_systolic": 115, "bp_diastolic": 75,
+        "glucose": 90, "hr": 68, "spo2": 99,
+        "diagnosis_encoded": 4, "previous_trials": 1,
+        "product_experience": 2, "last_trial_outcome": 1,
+        "health_risk_score": 0.12,
+        "age_grp_adult": 1, "age_grp_elderly": 0
+    }
+    test_manipulated = {
+        "age": 52, "bp_systolic": 145, "bp_diastolic": 95,
+        "glucose": 180, "hr": 88, "spo2": 96,
+        "diagnosis_encoded": 2, "previous_trials": 2,
+        "product_experience": 1, "last_trial_outcome": 0,
+        "health_risk_score": 0.74,
+        "age_grp_adult": 1, "age_grp_elderly": 0
+    }
+
+    r1 = predict(test_authentic)
+    r2 = predict(test_manipulated)
+
+    print(f"[ML VERIFY] Authentic  test → {r1['decision']} "
+          f"({r1['confidence_authentic']:.1f}% authentic)")
+    print(f"[ML VERIFY] Manipulated test → {r2['decision']} "
+          f"({r2['confidence_manipulated']:.1f}% manipulated)")
+
+    if r1["decision"] != "AUTHENTIC":
+        print("[ML VERIFY] ⚠ WARNING: Model FAILING authentic test — check feature order!")
+    if r2["decision"] != "MANIPULATED":
+        print("[ML VERIFY] ⚠ WARNING: Model FAILING manipulated test — check feature order!")
+
+    if r1["decision"] == "AUTHENTIC" and r2["decision"] == "MANIPULATED":
+        print("[ML VERIFY] ✓ Model passing both sanity checks.")

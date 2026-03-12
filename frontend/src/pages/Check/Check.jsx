@@ -17,19 +17,45 @@ export default function Check() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const age = Number(form.age) || 0;
-    const sys = Number(form.bp_systolic) || 0;
-    const glu = Number(form.glucose) || 0;
-    const spo2 = Number(form.spo2) || 0;
+    const age  = Number(form.age)         || 0;
+    const sys  = Number(form.bp_systolic) || 0;
+    const dia  = Number(form.bp_diastolic)|| 0;
+    const glu  = Number(form.glucose)     || 0;
+    const hr   = Number(form.hr)          || 0;
+    const spo2 = Number(form.spo2)        || 0;
 
-    const bp_risk = sys > 140 ? 0.3 : sys > 120 ? 0.15 : 0;
-    const gluc_risk = glu > 126 ? 0.3 : glu > 100 ? 0.15 : 0;
-    const spo2_risk = spo2 > 0 && spo2 < 95 ? 0.3 : spo2 > 0 && spo2 < 98 ? 0.1 : 0;
-    const age_risk = age > 65 ? 0.1 : 0;
-    
+    // ── Component scores ─────────────────────────────────────────
+    const bp_score =
+      (sys > 160 || dia > 100) ? 0.40 :
+      (sys > 140 || dia > 90)  ? 0.25 :
+      (sys > 120 || dia > 80)  ? 0.10 : 0.05;
+
+    const glucose_score =
+      glu > 200 ? 0.35 :
+      glu > 126 ? 0.20 :
+      glu > 100 ? 0.10 : 0.05;
+
+    const hr_score =
+      (hr > 130 || hr < 45) ? 0.35 :
+      (hr > 100 || hr < 55) ? 0.20 :
+      (hr > 90  || hr < 60) ? 0.08 : 0.03;
+
+    const spo2_score =
+      (spo2 > 0 && spo2 < 88) ? 0.35 :
+      (spo2 > 0 && spo2 < 92) ? 0.25 :
+      (spo2 > 0 && spo2 < 95) ? 0.12 : 0.02;
+
+    const age_score =
+      age > 75 ? 0.10 :
+      age > 65 ? 0.07 :
+      age > 55 ? 0.04 : 0.02;
+
+    const total = bp_score + glucose_score + hr_score + spo2_score + age_score;
+    const hrs   = parseFloat(Math.min(Math.max(total, 0.05), 1.00).toFixed(2));
+
     setComputed({
-      health_risk_score: Math.min(bp_risk + gluc_risk + spo2_risk + age_risk, 1.0).toFixed(2),
-      age_grp_adult: age >= 18 && age < 60 ? 1 : 0,
+      health_risk_score: hrs,
+      age_grp_adult:   age >= 18 && age < 60 ? 1 : 0,
       age_grp_elderly: age >= 60 ? 1 : 0
     });
   }, [form]);
@@ -45,13 +71,23 @@ export default function Check() {
       return;
     }
 
+    const computedHRS = parseFloat(computed.health_risk_score) || 0.05;
     const payload = {
-      ...form,
-      age: Number(form.age), bp_systolic: Number(form.bp_systolic), bp_diastolic: Number(form.bp_diastolic),
-      glucose: Number(form.glucose), hr: Number(form.hr), spo2: Number(form.spo2),
-      diagnosis_encoded: Number(form.diagnosis_encoded), previous_trials: Number(form.previous_trials),
-      product_experience: Number(form.product_experience), last_trial_outcome: Number(form.last_trial_outcome),
-      health_risk_score: Number(computed.health_risk_score), age_grp_adult: computed.age_grp_adult, age_grp_elderly: computed.age_grp_elderly
+      age:                parseFloat(form.age)               || 0,
+      bp_systolic:        parseFloat(form.bp_systolic)        || 0,
+      bp_diastolic:       parseFloat(form.bp_diastolic)       || 0,
+      glucose:            parseFloat(form.glucose)            || 0,
+      hr:                 parseFloat(form.hr)                 || 0,
+      spo2:               parseFloat(form.spo2)               || 0,
+      diagnosis_encoded:  parseInt(form.diagnosis_encoded)    || 0,
+      previous_trials:    parseInt(form.previous_trials)      || 0,
+      product_experience: parseFloat(form.product_experience) || 0,
+      last_trial_outcome: parseFloat(form.last_trial_outcome) || 0,
+      health_risk_score:  Math.max(computedHRS, 0.05),
+      age_grp_adult:      computed.age_grp_adult,
+      age_grp_elderly:    computed.age_grp_elderly,
+      trial_id:           form.trial_id  || 'UNKNOWN',
+      site_id:            form.site_id   || user?.site_id || 'UNKNOWN',
     };
 
     try {
@@ -155,7 +191,18 @@ export default function Check() {
                 <span>{computed.health_risk_score} / 1.00</span>
               </div>
               <div className={styles.scoreTrack}>
-                <div className={styles.scoreFill} style={{ width: `${computed.health_risk_score * 100}%`, background: computed.health_risk_score > 0.5 ? 'var(--red)' : 'var(--blue)' }}></div>
+                <div className={styles.scoreFill} style={{
+                  width: `${computed.health_risk_score * 100}%`,
+                  background:
+                    computed.health_risk_score > 0.60 ? '#ef4444' :
+                    computed.health_risk_score > 0.30 ? '#f97316' :
+                    '#10b981'
+                }}></div>
+              </div>
+              <div style={{ fontSize: '0.7rem', marginTop: '4px', opacity: 0.7 }}>
+                {computed.health_risk_score <= 0.30 ? '✓ Normal range' :
+                 computed.health_risk_score <= 0.60 ? '⚠ Elevated risk' :
+                 '⛔ High risk — expect MANIPULATED flag'}
               </div>
             </div>
           </div>

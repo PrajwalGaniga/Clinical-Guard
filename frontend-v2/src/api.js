@@ -4,15 +4,12 @@ import axios from 'axios';
 // This completely eliminates browser CORS issues.
 const api = axios.create({
   baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const token = sessionStorage.getItem('clinicalguard_token');
+      const token = sessionStorage.getItem('cg_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }

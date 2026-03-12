@@ -38,27 +38,44 @@ export default function SingleCheckPage() {
 
   // Compute live logic based on vitals automatically
   useEffect(() => {
-    const age = Number(formData.age) || 0;
-    const sys = Number(formData.bp_systolic) || 0;
-    const dia = Number(formData.bp_diastolic) || 0;
-    const hr = Number(formData.hr) || 0;
-    const spo2 = Number(formData.spo2) || 0;
-    const gluc = Number(formData.glucose) || 0;
+    const age  = Number(formData.age)         || 0;
+    const sys  = Number(formData.bp_systolic) || 0;
+    const dia  = Number(formData.bp_diastolic)|| 0;
+    const hr   = Number(formData.hr)          || 0;
+    const spo2 = Number(formData.spo2)        || 0;
+    const gluc = Number(formData.glucose)     || 0;
 
-    let score = 0;
-    if (sys > 140 || sys < 90) score += 1.5;
-    if (dia > 90 || dia < 60) score += 1.0;
-    if (hr > 100 || hr < 60) score += 1.2;
-    if (spo2 < 95) score += 2.0;
-    if (gluc > 140 || gluc < 70) score += 1.0;
-    
-    // Exact SFO simulation if user zeroes it out manually it will be overridden in state later if not careful
-    // But since it's computed, we will just calculate it. 
-    // To allow SFO, we'll let user override it if they type, but typical flow computes it.
-    // For simplicity of specification: "health_risk_score calculates from vitals automatically"
+    // ── Component scores ─────────────────────────────────────────
+    const bp_score =
+      (sys > 160 || dia > 100) ? 0.40 :
+      (sys > 140 || dia > 90)  ? 0.25 :
+      (sys > 120 || dia > 80)  ? 0.10 : 0.05;
+
+    const glucose_score =
+      gluc > 200 ? 0.35 :
+      gluc > 126 ? 0.20 :
+      gluc > 100 ? 0.10 : 0.05;
+
+    const hr_score =
+      (hr > 130 || hr < 45) ? 0.35 :
+      (hr > 100 || hr < 55) ? 0.20 :
+      (hr > 90  || hr < 60) ? 0.08 : 0.03;
+
+    const spo2_score =
+      (spo2 > 0 && spo2 < 88) ? 0.35 :
+      (spo2 > 0 && spo2 < 92) ? 0.25 :
+      (spo2 > 0 && spo2 < 95) ? 0.12 : 0.02;
+
+    const age_score =
+      age > 75 ? 0.10 :
+      age > 65 ? 0.07 :
+      age > 55 ? 0.04 : 0.02;
+
+    const total = bp_score + glucose_score + hr_score + spo2_score + age_score;
+    const score = parseFloat(Math.min(Math.max(total, 0.05), 1.00).toFixed(2));
     
     setComputed({
-      health_risk_score: parseFloat(score.toFixed(2)),
+      health_risk_score: score,
       age_grp_adult: (age >= 18 && age < 60) ? 1 : 0,
       age_grp_elderly: age >= 60 ? 1 : 0
     });
@@ -78,22 +95,23 @@ export default function SingleCheckPage() {
     const fullRecord = { ...formData, ...computed };
     
     // Ensure numbers are parsed correctly for ML
+    const parsedHRS = parseFloat(fullRecord.health_risk_score) || 0.05;
     const parsedRecord = {
-      trial_id: String(fullRecord.trial_id),
-      site_id: String(fullRecord.site_id),
-      age: Number(fullRecord.age),
-      bp_systolic: Number(fullRecord.bp_systolic),
-      bp_diastolic: Number(fullRecord.bp_diastolic),
-      glucose: Number(fullRecord.glucose),
-      hr: Number(fullRecord.hr),
-      spo2: Number(fullRecord.spo2),
-      health_risk_score: Number(fullRecord.health_risk_score),
-      age_grp_adult: Number(fullRecord.age_grp_adult),
-      age_grp_elderly: Number(fullRecord.age_grp_elderly),
-      diagnosis_encoded: Number(fullRecord.diagnosis_encoded),
-      previous_trials: Number(fullRecord.previous_trials),
-      product_experience: Number(fullRecord.product_experience),
-      last_trial_outcome: Number(fullRecord.last_trial_outcome)
+      trial_id: fullRecord.trial_id || "UNKNOWN",
+      site_id: fullRecord.site_id || "UNKNOWN",
+      age: parseFloat(fullRecord.age),
+      bp_systolic: parseFloat(fullRecord.bp_systolic),
+      bp_diastolic: parseFloat(fullRecord.bp_diastolic),
+      glucose: parseFloat(fullRecord.glucose),
+      hr: parseFloat(fullRecord.hr),
+      spo2: parseFloat(fullRecord.spo2),
+      health_risk_score: Math.max(parsedHRS, 0.05),
+      age_grp_adult: parseInt(fullRecord.age_grp_adult),
+      age_grp_elderly: parseInt(fullRecord.age_grp_elderly),
+      diagnosis_encoded: parseInt(fullRecord.diagnosis_encoded),
+      previous_trials: parseInt(fullRecord.previous_trials),
+      product_experience: parseInt(fullRecord.product_experience),
+      last_trial_outcome: parseInt(fullRecord.last_trial_outcome)
     };
 
     if (isDemo) {
@@ -113,10 +131,23 @@ export default function SingleCheckPage() {
     }
 
     try {
+      console.log('Sending payload to /api/predict/single:', parsedRecord);
       const res = await api.post('/predict/single', parsedRecord);
       setResult(res.data);
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Prediction failed. Please try again.');
+      let errorMsg = 'Prediction failed. Please try again.';
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string') {
+        errorMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errorMsg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (detail) {
+        errorMsg = JSON.stringify(detail);
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -276,9 +307,14 @@ export default function SingleCheckPage() {
             </div>
             
             <div style={{ marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
-              <div className={`${styles.previewItem} ${computed.health_risk_score > 3.0 ? styles.previewItemDanger : (computed.health_risk_score > 1.0 ? styles.previewItemWarning : styles.previewItemNormal)}`}>
+              <div className={`${styles.previewItem} ${computed.health_risk_score > 0.60 ? styles.previewItemDanger : (computed.health_risk_score > 0.30 ? styles.previewItemWarning : styles.previewItemNormal)}`}>
                 <span className={styles.previewLabel}>Computed Risk Score</span>
                 <span className={styles.previewVal}>{computed.health_risk_score}</span>
+              </div>
+              <div style={{ fontSize: '0.7rem', marginTop: '4px', opacity: 0.7, color: 'var(--text-secondary)' }}>
+                {computed.health_risk_score <= 0.30 ? '✓ Normal range' :
+                 computed.health_risk_score <= 0.60 ? '⚠ Elevated risk' :
+                 '⛔ High risk — expect MANIPULATED flag'}
               </div>
             </div>
           </div>

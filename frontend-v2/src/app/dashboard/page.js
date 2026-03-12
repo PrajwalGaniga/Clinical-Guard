@@ -219,7 +219,7 @@ export default function Dashboard() {
               <div key={idx} className={styles.alertItem}>
                 <div className={styles.alertInfo}>
                   <span className={styles.alertSite}>{alert.site_id}</span>
-                  <span className={styles.alertHash}>Tx: {alert.data_hash.substring(0, 16)}...</span>
+                  <span className={styles.alertHash}>Tx: {alert.data_hash?.substring(0, 16) || '—'}...</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                   <span className={`${styles.badge} ${styles.badgeHigh}`}>{alert.risk_level}</span>

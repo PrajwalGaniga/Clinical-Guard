@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import connect_to_mongo, close_mongo_connection
 from .config import get_settings
 from .routes import auth, predict, dashboard, records, audit, mentor
+from .services import ml_service
 
 settings = get_settings()
 
@@ -12,11 +13,13 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────
     await connect_to_mongo()
+    ml_service.verify_model_working()   # Fix 6: sanity-check ML at startup
     print("[CLINICALGUARD] Backend is ready. 🧬")
     yield
     # ── Shutdown ──────────────────────────────────────────────────
     await close_mongo_connection()
     print("[CLINICALGUARD] Shutdown complete.")
+
 
 
 app = FastAPI(
@@ -25,6 +28,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+from fastapi import Request
+import time
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    print(f"DEBUG: {request.method} {request.url.path} - Status: {response.status_code} - Duration: {duration:.4f}s")
+    return response
 
 # ── CORS ──────────────────────────────────────────────────────────
 origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]

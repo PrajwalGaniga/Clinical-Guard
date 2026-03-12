@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api';
 import styles from './page.module.css';
 
 export default function AuditPage() {
   const { user } = useAuth();
+  const router = useRouter();
   
   // Strict rule: state declarations first
   const [page, setPage] = useState(1);
@@ -14,6 +16,12 @@ export default function AuditPage() {
   const [error, setError] = useState('');
   const [logs, setLogs] = useState([]);
   const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'investigator') {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
 
   const limit = 15;
   const isDemo = typeof window !== 'undefined' && sessionStorage.getItem('clinicalguard_demo') === 'true';
@@ -64,7 +72,8 @@ export default function AuditPage() {
     switch (action) {
       case 'MANIPULATION_DETECTED': return styles.badgeMan;
       case 'SFO_AUTO_DETECTED': return styles.badgeSfo;
-      default: return styles.badgeCommit;
+      case 'COMMIT_TRANSACTION': return styles.badgeCommit;
+      default: return styles.badgeDefault || styles.badgeGray || styles.badgeCommit;
     }
   };
 
@@ -140,7 +149,7 @@ export default function AuditPage() {
                      <td>
                        {isStub ? (
                          <span className={`${styles.verifyBtn} ${styles.verifyBtnDisabled}`}>
-                           (STUB Tx)
+                           (Stub Mode)
                          </span>
                        ) : (
                          <a 

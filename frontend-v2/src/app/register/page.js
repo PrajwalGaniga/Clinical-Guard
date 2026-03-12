@@ -53,6 +53,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api.post('/auth/register', {
+        name:    formData.email.split('@')[0], // Fallback name for strict schema
         email:   formData.email,
         password: formData.password,
         role:    formData.role,
@@ -62,7 +63,16 @@ export default function RegisterPage() {
       setSuccess(true);
       setTimeout(() => router.push('/login'), 2500);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed. This email may already be registered.');
+      let errorMsg = 'Registration failed. This email may already be registered.';
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string') {
+        errorMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errorMsg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (detail) {
+        errorMsg = JSON.stringify(detail);
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

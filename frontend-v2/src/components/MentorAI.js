@@ -23,7 +23,8 @@ const LOCAL_ANSWERS = {
   "what does the ai reasoning show?": "The Gemini AI takes the ML verdict and plain text vitals and translates why the record failed into clear clinical sentences for practitioners."
 };
 
-export default function MentorAI({ isOpen, onClose }) {
+export default function MentorAI() {
+  const [isOpen, setOpen] = useState(false);
   const [messages, setMessages] = useState([
     { text: "Hello! I am Mentor AI. How can I help you understand data integrity today?", sender: "bot", isGemini: false }
   ]);
@@ -37,13 +38,23 @@ export default function MentorAI({ isOpen, onClose }) {
     // Listen for custom event to set context from any page
     const handleContext = (e) => {
       if (e.detail?.record_id) {
+        setOpen(true);
         setCurrentContext(e.detail.record_id);
         const intro = e.detail.intro || `I have loaded context for record ${e.detail.record_id.slice(0, 8)}... How can I assist you with this record?`;
         setMessages(prev => [...prev, { text: intro, sender: "bot", isGemini: false }]);
       }
     };
+    
+    // Fix A: Listen for generic openMentor event
+    const handleOpen = () => setOpen(true);
+    
     window.addEventListener('setMentorContext', handleContext);
-    return () => window.removeEventListener('setMentorContext', handleContext);
+    window.addEventListener('openMentor', handleOpen);
+    
+    return () => {
+      window.removeEventListener('setMentorContext', handleContext);
+      window.removeEventListener('openMentor', handleOpen);
+    };
   }, []);
 
   useEffect(() => {
@@ -77,8 +88,20 @@ export default function MentorAI({ isOpen, onClose }) {
     try {
       const payload = { message: text };
       if (currentContext) payload.record_id = currentContext;
-      const res = await api.post('/mentor/chat', payload);
-      setMessages(prev => [...prev, { text: res.data.response, sender: "bot", isGemini: true }]);
+      
+      const token = sessionStorage.getItem('cg_token');
+      const res = await fetch('/api/mentor/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error('API Error');
+      const data = await res.json();
+      setMessages(prev => [...prev, { text: data.reply, sender: "bot", isGemini: true }]);
     } catch (err) {
       setMessages(prev => [...prev, { text: "I'm having trouble connecting to my AI logic right now. Please try again later.", sender: "bot", isGemini: false }]);
     } finally {
@@ -97,7 +120,7 @@ export default function MentorAI({ isOpen, onClose }) {
       )}
 
       {/* Actual persistent floating toggle if closed */}
-      <button className={styles.fab} onClick={isOpen ? onClose : () => onClose(false) /* Parent controls state mostly, but a click here toggles it */ } 
+      <button className={styles.fab} onClick={() => setOpen(true)} 
          style={{ display: isOpen ? 'none' : 'flex' }}>
          🤖
       </button>
@@ -109,7 +132,7 @@ export default function MentorAI({ isOpen, onClose }) {
               <span className={styles.onlineDot}></span>
               🤖 Mentor AI
             </div>
-            <button className={styles.closeBtn} onClick={onClose}>&times;</button>
+            <button className={styles.closeBtn} onClick={() => setOpen(false)}>&times;</button>
           </div>
 
           <div className={styles.body}>

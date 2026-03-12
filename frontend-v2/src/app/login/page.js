@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../context/AuthContext';
 import styles from './page.module.css';
 
 export default function LoginPage() {
@@ -9,10 +11,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
+  
+  const router = useRouter();
+  const { login } = useAuth();
 
   // Check for session-expired flag (set by AuthContext before redirect)
   const expired = typeof window !== 'undefined' &&
-    sessionStorage.getItem('clinicalguard_session_expired') === 'true';
+    sessionStorage.getItem('cg_session_expired') === 'true';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,39 +27,47 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const params = new URLSearchParams();
-      params.append('username', email);
-      params.append('password', password);
-
       const res = await fetch('/api/auth/login', {
         method:  'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body:    params.toString(),
+        body:    new URLSearchParams({ username: email, password }).toString(),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.detail || 'Invalid email or password.');
+        let errorMsg = 'Invalid email or password.';
+        const detail = data.detail;
+        if (typeof detail === 'string') {
+          errorMsg = detail;
+        } else if (Array.isArray(detail)) {
+          errorMsg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+        } else if (detail) {
+          errorMsg = JSON.stringify(detail);
+        }
+        setError(errorMsg);
         setLoading(false);
         return;
       }
 
-      if (data.access_token) {
-        // Store token and user info
-        sessionStorage.setItem('clinicalguard_token', data.access_token);
-        sessionStorage.setItem('clinicalguard_user', JSON.stringify({
-          email:    data.email,
-          role:     data.role,
-          hospital: data.hospital,
-          site_id:  data.site_id || 'SITE_001',
-        }));
-        sessionStorage.removeItem('clinicalguard_session_expired');
+      console.log('Login successful, mapping user data:', data);
 
-        // Hard redirect — ensures AuthContext re-initializes cleanly
-        window.location.href = '/dashboard';
+      if (data.access_token) {
+        // Map flat response to user object
+        const userData = {
+          role: data.role,
+          email: data.email,
+          hospital: data.hospital
+        };
+
+        // Store token and user info using context
+        sessionStorage.removeItem('cg_session_expired');
+        login(userData, data.access_token);
+
+        // Soft redirect to dashboard
+        router.push('/dashboard');
       } else {
-        setError('Login failed. Unexpected server response.');
+        setError('Login failed. Missing token in server response.');
         setLoading(false);
       }
     } catch (err) {

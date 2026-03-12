@@ -17,6 +17,7 @@ export default function ResultsPage() {
   const [riskFilter, setRiskFilter] = useState('ALL');
   const [decisionFilter, setDecisionFilter] = useState('ALL');
   const [expandedRow, setExpandedRow] = useState(null);
+  const [refresh, setRefresh] = useState(0);
 
   const limit = 20;
   const isDemo = typeof window !== 'undefined' && sessionStorage.getItem('clinicalguard_demo') === 'true';
@@ -45,22 +46,20 @@ export default function ResultsPage() {
       }
 
       try {
-        let url = `/records?page=${page}&limit=${limit}`;
-        if (riskFilter !== 'ALL') url += `&risk_level=${riskFilter}`;
-        if (decisionFilter !== 'ALL') url += `&verdict=${decisionFilter === 'AUTHENTIC' ? 'Authentic' : 'Manipulated'}`;
+        let url = `/records?page=${page}&limit=${limit}&risk=${riskFilter}&decision=${decisionFilter}`;
 
         const res = await api.get(url);
-        setRecords(res.data.records);
-        setTotal(res.data.total);
+        setRecords(res.data.records || []);
+        setTotal(res.data.total || 0);
       } catch (err) {
-        setError('Failed to load database records.');
+        setError('Failed to load records');
       } finally {
         setLoading(false);
       }
     };
 
     fetchRecords();
-  }, [page, riskFilter, decisionFilter, isDemo]);
+  }, [page, riskFilter, decisionFilter, isDemo, refresh]);
 
   // Use useEffect to reset page when filters change
   useEffect(() => {
@@ -79,7 +78,7 @@ export default function ResultsPage() {
       <div className={styles.container}>
         <div className={styles.header}><div className={styles.title}>Results Database</div></div>
         <div style={{ color: 'var(--accent-red)' }}>{error}</div>
-        <button className={styles.pageBtn} onClick={() => window.location.reload()} style={{ alignSelf: 'flex-start' }}>Retry Database Connection</button>
+        <button className={styles.pageBtn} onClick={() => setRefresh(r => r + 1)} style={{ alignSelf: 'flex-start' }}>Retry Database Connection</button>
       </div>
     );
   }
@@ -145,18 +144,29 @@ export default function ResultsPage() {
             ) : records.length === 0 ? (
               <tr>
                 <td colSpan="9">
-                  <div className={styles.emptyState}>No records match your filters.</div>
+                  <div className={styles.emptyState}>No records found. Submit a record from Single Check or Batch Upload to see results here.</div>
                 </td>
               </tr>
             ) : (
               records.map((r, i) => {
                 const rowNum = (page - 1) * limit + i + 1;
-                const dateStr = new Date(r.created_at).toLocaleDateString() + ' ' + new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const confPercent = ((r.verdict === 'Authentic' ? r.confidence_authentic : (1 - r.confidence_authentic)) * 100).toFixed(1);
+                const timestamp = r.submitted_at || r.created_at || new Date().toISOString();
+                const dateStr = new Date(timestamp).toLocaleDateString() + ' ' + new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 
+                // Mappings compatible with both real backend AND demo logic
+                const decisionStr = r.ml_result?.decision || r.verdict || 'UNKNOWN';
+                const riskLvl = r.ml_result?.risk_level || r.risk_level || 'UNKNOWN';
+                const confAuth = r.ml_result ? r.ml_result.confidence_authentic : (r.confidence_authentic || 0);
+                const confPercent = (Math.min(confAuth, 100)).toFixed(1);
+                
+                const recData = r.record || r.original_data || {};
+                const geminiText = r.gemini_reasoning || r.reasoning || 'No AI reasoning available.';
+                const dataHash = r.blockchain?.data_hash || r.data_hash || 'N/A';
+                const txHash = r.blockchain?.tx_hash || r.metadata?.blockchain_tx || 'Pending / N/A';
+
                 let badgeRiskClass = styles.badgeLow;
-                if (r.risk_level === 'HIGH') badgeRiskClass = styles.badgeHigh;
-                if (r.risk_level === 'MEDIUM') badgeRiskClass = styles.badgeMed;
+                if (riskLvl === 'HIGH') badgeRiskClass = styles.badgeHigh;
+                if (riskLvl === 'MEDIUM') badgeRiskClass = styles.badgeMed;
 
                 return (
                   <Fragment key={r.id || r._id || i}>
@@ -166,17 +176,17 @@ export default function ResultsPage() {
                       <td>{r.trial_id || 'N/A'}</td>
                       <td>{r.site_id || 'N/A'}</td>
                       <td>
-                        <span className={`${styles.badge} ${r.verdict === 'Authentic' ? styles.badgeAuth : styles.badgeMan}`}>
-                          {r.verdict}
+                        <span className={`${styles.badge} ${decisionStr.toUpperCase() === 'AUTHENTIC' ? styles.badgeAuth : styles.badgeMan}`}>
+                          {decisionStr}
                         </span>
                       </td>
                       <td>
                         <span className={`${styles.badge} ${badgeRiskClass}`}>
-                          {r.risk_level}
+                          {riskLvl}
                         </span>
                       </td>
                       <td>{confPercent}%</td>
-                      <td className={styles.hashCell}>{r.data_hash ? r.data_hash.substring(0, 16) + '...' : 'N/A'}</td>
+                      <td className={styles.hashCell} style={{ fontFamily: 'monospace' }}>{dataHash?.substring(0, 16) + '...'}</td>
                       <td style={{ color: 'var(--accent-blue)', fontSize: 20 }}>{expandedRow === i ? '▲' : '▼'}</td>
                     </tr>
                     
@@ -184,13 +194,13 @@ export default function ResultsPage() {
                       <tr className={styles.expandedRow}>
                         <td colSpan="9">
                           <div className={styles.detailsGrid}>
-                            {r.original_data && Object.keys(r.original_data).slice(0, 13).map(key => (
+                            {Object.keys(recData).slice(0, 13).map(key => (
                               <div key={key} className={styles.detailItem}>
                                 <span className={styles.dLabel}>{key.replace(/_/g, ' ')}</span>
                                 <span className={styles.dVal}>{
-                                  typeof r.original_data[key] === 'number' && r.original_data[key] % 1 !== 0 
-                                    ? r.original_data[key].toFixed(2) 
-                                    : r.original_data[key]
+                                  typeof recData[key] === 'number' && recData[key] % 1 !== 0 
+                                    ? recData[key].toFixed(2) 
+                                    : recData[key]
                                 }</span>
                               </div>
                             ))}
@@ -198,13 +208,13 @@ export default function ResultsPage() {
                           
                           <div className={styles.geminiBox}>
                             <div className={styles.geminiTitle}>✦ Gemini AI Reasoning</div>
-                            <div className={styles.geminiText}>{r.reasoning}</div>
+                            <div className={styles.geminiText}>{geminiText}</div>
                           </div>
                           
-                          <div className={styles.txBox}>
-                            Full On-Chain Hash: {r.data_hash}
+                          <div className={styles.txBox} style={{ fontFamily: 'monospace' }}>
+                            Full On-Chain Hash: {dataHash}
                             <br/>
-                            Blockchain TX: {r.metadata?.blockchain_tx || 'Pending / N/A'}
+                            Blockchain TX: {txHash}
                           </div>
                         </td>
                       </tr>
@@ -229,7 +239,7 @@ export default function ResultsPage() {
         <button 
           className={styles.pageBtn} 
           onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-          disabled={page >= totalPages || loading}
+          disabled={page * limit >= total || loading}
         >
           Next
         </button>

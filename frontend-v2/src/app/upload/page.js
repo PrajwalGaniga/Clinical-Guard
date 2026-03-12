@@ -74,6 +74,20 @@ export default function BatchUploadPage() {
       const lines = e.target.result.split('\n');
       if (lines.length < 2) return;
       const headers = lines[0].split(',').map(h => h.trim());
+      
+      // Fix C: Pre-scan CSV client-side
+      let missingCols = [];
+      for (const reqCol of TEMPLATE_HEADERS) {
+        if (!headers.includes(reqCol)) missingCols.push(reqCol);
+      }
+      if (missingCols.length > 0) {
+        setError(`Missing columns: ${missingCols.join(', ')}`);
+        setWarningCount(0);
+        return;
+      } else {
+        setError(''); // clear any previous error if headers are valid
+      }
+
       const hrsIdx = headers.indexOf('health_risk_score');
       if (hrsIdx === -1) return;
       let zeros = 0;
@@ -103,12 +117,18 @@ export default function BatchUploadPage() {
   };
 
   const downloadTemplate = () => {
-    const csv = TEMPLATE_HEADERS.join(',') + '\nTR-001,SITE_001,45,120,80,100,72,98,4,1,0,1,0.38,1,0';
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csvRows = [
+      TEMPLATE_HEADERS.join(','),
+      'TR-10001,SITE_001,45,120,80,100,75,98,4,1,1,1,0.17,1,0',   // Row 1: Authentic
+      'TR-10002,SITE_001,52,145,95,180,88,96,2,2,1,0,0.74,1,0',   // Row 2: Manipulated
+      'TR-10003,SITE_001,58,155,98,190,110,93,1,3,2,0,0.00,1,0'   // Row 3: SFO (0.00 HRS)
+    ];
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'clinicalguard_template.csv';
+    a.download = 'ClinicalGuard_Sample_Template.csv';
     a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const processUpload = async () => {
@@ -139,7 +159,9 @@ export default function BatchUploadPage() {
       if (typeof detail === 'string') {
         errorMsg = detail;
       } else if (Array.isArray(detail)) {
-        errorMsg = detail.map(d => d.msg).join(', ');
+        errorMsg = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (detail) {
+        errorMsg = JSON.stringify(detail);
       }
       setError(errorMsg);
     } finally {
@@ -226,7 +248,7 @@ export default function BatchUploadPage() {
 
           {error && <div className={styles.alertError}>{error}</div>}
 
-          {file && (
+          {file && !error && (
             <button onClick={processUpload} className={styles.processBtn}>
               {warningCount > 0 ? `Process (${warningCount} SFO warnings)` : 'Run Batch Integrity Check'}
             </button>

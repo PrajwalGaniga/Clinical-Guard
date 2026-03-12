@@ -21,29 +21,40 @@ export const AuthProvider = ({ children }) => {
   const router   = useRouter();
   const pathname = usePathname();
 
-  // ── Logout ────────────────────────────────────────────────────
-  const logout = useCallback((expired = false) => {
-    sessionStorage.removeItem('clinicalguard_token');
-    sessionStorage.removeItem('clinicalguard_user');
-    if (expired) sessionStorage.setItem('clinicalguard_session_expired', 'true');
-    setUser(null);
-    window.location.href = '/login';
+  const login = useCallback((userData, token) => {
+    console.log('AuthContext: login called with', userData);
+    sessionStorage.setItem('cg_token', token);
+    sessionStorage.setItem('cg_user', JSON.stringify(userData));
+    setUser(userData);
   }, []);
+
+  const logout = useCallback((expired = false) => {
+    sessionStorage.removeItem('cg_token');
+    sessionStorage.removeItem('cg_user');
+    sessionStorage.removeItem('clinicalguard_demo');
+    if (expired) sessionStorage.setItem('cg_session_expired', 'true');
+    setUser(null);
+    router.push('/login');
+  }, [router]);
 
   // ── Restore session from sessionStorage (set by login page) ───
   useEffect(() => {
     const restore = async () => {
-      const token    = sessionStorage.getItem('clinicalguard_token');
-      const userJson = sessionStorage.getItem('clinicalguard_user');
+      const token    = sessionStorage.getItem('cg_token');
+      const userJson = sessionStorage.getItem('cg_user');
 
       if (token && userJson) {
         try {
           const userData = JSON.parse(userJson);
+          console.log('AuthContext: Restored user from session:', userData);
           setUser(userData);
-        } catch {
-          sessionStorage.removeItem('clinicalguard_token');
-          sessionStorage.removeItem('clinicalguard_user');
+        } catch (e) {
+          console.error('AuthContext: Failed to parse userJson', e);
+          sessionStorage.removeItem('cg_token');
+          sessionStorage.removeItem('cg_user');
         }
+      } else {
+        console.log('AuthContext: No session to restore.');
       }
       setLoading(false);
     };
@@ -56,7 +67,7 @@ export const AuthProvider = ({ children }) => {
       res => res,
       err => {
         if (err.response?.status === 401) {
-          const token = sessionStorage.getItem('clinicalguard_token');
+          const token = sessionStorage.getItem('cg_token');
           if (token) logout(true); // token exists but server rejected = expired
         }
         return Promise.reject(err);
@@ -85,8 +96,10 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user, loading, pathname, router]);
 
+  const isDemo = user?.email === 'demo@clinicalguard.com';
+
   return (
-    <AuthContext.Provider value={{ user, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, isDemo }}>
       {children}
     </AuthContext.Provider>
   );

@@ -32,16 +32,26 @@ class TrialRecord(BaseModel):
 
 def detect_sfo_pattern(record: dict) -> bool:
     """
-    Detects Selective Field Omission: health_risk_score is 0.00
-    while physiological vitals indicate an active patient.
+    Detects Selective Field Omission:
+    health_risk_score is suspiciously low (< 0.10) WHILE
+    at least 2 vitals are clearly outside normal clinical ranges.
+    A genuinely healthy patient will never have HRS < 0.10 after Fix 1.
     """
-    hrs = record.get("health_risk_score", 0)
-    bp_dia = record.get("bp_diastolic", 0)
-    glucose = record.get("glucose", 0)
-    hr = record.get("hr", 0)
+    hrs      = float(record.get("health_risk_score", 0))
+    bp_sys   = float(record.get("bp_systolic", 0))
+    bp_dia   = float(record.get("bp_diastolic", 0))
+    glucose  = float(record.get("glucose", 0))
+    hr       = float(record.get("hr", 0))
+    spo2     = float(record.get("spo2", 100))
 
-    # A truly healthy patient with normal vitals will have HRS > 0.05
-    if hrs == 0.0 and bp_dia > 65 and glucose > 75 and hr > 55:
+    abnormal_count = 0
+    if bp_sys > 140 or bp_dia > 90:  abnormal_count += 1
+    if glucose > 126:                 abnormal_count += 1
+    if hr > 100 or hr < 55:          abnormal_count += 1
+    if spo2 < 95:                     abnormal_count += 1
+
+    # SFO: score is suspiciously low but ≥2 vitals are clearly abnormal
+    if hrs < 0.10 and abnormal_count >= 2:
         return True
     return False
 
@@ -150,6 +160,26 @@ from fastapi import UploadFile, File
 import pandas as pd
 import io
 
+# Common alternative column names → canonical names
+_COL_ALIASES = {
+    "blood_pressure_systolic":  "bp_systolic",
+    "blood_pressure_diastolic": "bp_diastolic",
+    "heart_rate":               "hr",
+    "oxygen_saturation":        "spo2",
+    "oxygen":                   "spo2",
+    "blood_glucose":            "glucose",
+    "risk_score":               "health_risk_score",
+    "age_group_adult":          "age_grp_adult",
+    "age_group_elderly":        "age_grp_elderly",
+}
+
+_REQUIRED_COLS = [
+    "age", "bp_systolic", "bp_diastolic", "glucose", "hr", "spo2",
+    "diagnosis_encoded", "previous_trials", "product_experience",
+    "last_trial_outcome", "health_risk_score", "age_grp_adult", "age_grp_elderly"
+]
+
+
 @router.post("/batch")
 async def predict_batch(
     file: UploadFile = File(...),
@@ -158,57 +188,81 @@ async def predict_batch(
     """Run batch predictions from a CSV file."""
     db = get_database()
     content = await file.read()
-    
+
     try:
         df = pd.read_csv(io.StringIO(content.decode("utf-8")))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid CSV file format: {e}")
 
+    # Normalize column names: strip whitespace, lowercase, spaces/hyphens → underscore
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_", regex=False)
+        .str.replace("-", "_", regex=False)
+    )
+
+    # Remap common alternative column names
+    df.rename(columns=_COL_ALIASES, inplace=True)
+
+    # Verify required columns are present
+    missing_cols = [c for c in _REQUIRED_COLS if c not in df.columns]
+    if missing_cols:
+        raise HTTPException(
+            status_code=422,
+            detail=f"CSV is missing required columns: {missing_cols}. "
+                   f"Available columns: {list(df.columns)}"
+        )
+
     results = []
-    auth_count = 0
-    man_count = 0
+    auth_count  = 0
+    man_count   = 0
+    pend_count  = 0
+    failed_rows = []
 
     for idx, row in df.iterrows():
+        row_label = f"Row {idx + 2}"  # +2 because idx is 0-based, row 1 is header
         try:
-            # Map pandas row to dict, replace NaN with None
             record_raw = row.where(pd.notnull(row), None).to_dict()
-            
-            # Extract features for ML (remove metadata)
-            trial_id = record_raw.get("trial_id", "NCT04414150")
-            site_id = record_raw.get("site_id", "SITE_001")
-            
-            # Clean record for model
-            clean_keys = ["age", "bp_systolic", "bp_diastolic", "glucose", "hr", "spo2", 
-                          "diagnosis_encoded", "previous_trials", "product_experience", 
-                          "last_trial_outcome", "health_risk_score", "age_grp_adult", "age_grp_elderly"]
-            
-            record = {}
-            for k in clean_keys:
-                if k in record_raw and record_raw[k] is not None:
-                    record[k] = float(record_raw[k]) if str(record_raw[k]).replace('.','',1).isdigit() else record_raw[k]
-                else:
-                    record[k] = 0.0 # Fallback 
 
-            # SHA-256 Hash
+            trial_id = str(record_raw.get("trial_id", "UNKNOWN") or "UNKNOWN")
+            site_id  = str(record_raw.get("site_id",  "SITE_001") or "SITE_001")
+
+            # Build clean record with numeric coercion
+            record = {}
+            for k in _REQUIRED_COLS:
+                val = record_raw.get(k)
+                if val is None:
+                    failed_rows.append(f"{row_label}: missing value for '{k}'")
+                    record[k] = 0.0
+                else:
+                    try:
+                        record[k] = float(val)
+                    except (ValueError, TypeError):
+                        failed_rows.append(f"{row_label}: invalid value '{val}' for '{k}'")
+                        record[k] = 0.0
+
+            # SHA-256 hash
             data_hash = hash_service.hash_record(record)
 
-            # SFO Pre-check
+            # SFO pre-check
             sfo_override = detect_sfo_pattern(record)
             if sfo_override:
                 ml_result = {
-                    "integrity_label": 0,
-                    "decision": "MANIPULATED",
-                    "confidence_authentic": 5.0,
+                    "integrity_label":        0,
+                    "decision":               "MANIPULATED",
+                    "confidence_authentic":   5.0,
                     "confidence_manipulated": 95.0,
-                    "risk_level": "HIGH",
-                    "blockchain_action": "REJECT_TRANSACTION",
-                    "sfo_detected": True
+                    "risk_level":             "HIGH",
+                    "blockchain_action":      "REJECT_TRANSACTION",
+                    "sfo_detected":           True
                 }
             else:
                 ml_result = ml_service.predict(record)
                 ml_result["sfo_detected"] = False
 
-            # Gemini Reasoning
+            # Gemini reasoning
             gemini_text = gemini_service.generate_reasoning(record, ml_result)
 
             # Blockchain
@@ -221,70 +275,85 @@ async def predict_batch(
                 site_id=site_id,
             )
 
-            # MongoDB Save
+            # MongoDB save
             action = ml_result["blockchain_action"]
-            status_str = "COMMITTED" if action == "COMMIT_TRANSACTION" else "REJECTED" if action == "REJECT_TRANSACTION" else "PENDING_REVIEW"
-            
+            status_str = (
+                "COMMITTED"     if action == "COMMIT_TRANSACTION"  else
+                "REJECTED"      if action == "REJECT_TRANSACTION"  else
+                "PENDING_REVIEW"
+            )
+
             doc = {
-                "trial_id": trial_id,
-                "site_id": site_id,
-                "hospital": current_user.get("hospital", "Unknown"),
+                "trial_id":     trial_id,
+                "site_id":      site_id,
+                "hospital":     current_user.get("hospital", "Unknown"),
                 "submitted_by": ObjectId(current_user["sub"]),
                 "submitted_at": datetime.utcnow(),
-                "record": record,
-                "ml_result": ml_result,
+                "record":       record,
+                "ml_result":    ml_result,
                 "gemini_reasoning": gemini_text,
                 "blockchain": {
-                    "data_hash": data_hash,
-                    "tx_hash": bc_result["tx_hash"],
+                    "data_hash":    data_hash,
+                    "tx_hash":      bc_result["tx_hash"],
                     "block_number": bc_result["block_number"],
-                    "network": bc_result["network"],
-                    "committed": status_str == "COMMITTED",
+                    "network":      bc_result["network"],
+                    "committed":    status_str == "COMMITTED",
                 },
                 "status": status_str,
             }
             res_db = await db.trial_records.insert_one(doc)
 
-            # Audit log for Manipulated
+            # Audit log for manipulated records
             if ml_result["integrity_label"] == 0:
                 await db.audit_logs.insert_one({
-                    "action": "SFO_AUTO_DETECTED" if sfo_override else "MANIPULATION_DETECTED",
-                    "record_id": res_db.inserted_id,
-                    "user_id": ObjectId(current_user["sub"]),
-                    "site_id": site_id,
-                    "hospital": current_user.get("hospital", "Unknown"),
-                    "timestamp": datetime.utcnow(),
-                    "details": f"{ml_result['risk_level']} risk — {ml_result['decision']} verdict",
+                    "action":     "SFO_AUTO_DETECTED" if sfo_override else "MANIPULATION_DETECTED",
+                    "record_id":  res_db.inserted_id,
+                    "user_id":    ObjectId(current_user["sub"]),
+                    "site_id":    site_id,
+                    "hospital":   current_user.get("hospital", "Unknown"),
+                    "timestamp":  datetime.utcnow(),
+                    "details":    f"{ml_result['risk_level']} risk — {ml_result['decision']} verdict",
                     "risk_level": ml_result["risk_level"],
-                    "data_hash": data_hash,
-                    "tx_hash": bc_result["tx_hash"],
+                    "data_hash":  data_hash,
+                    "tx_hash":    bc_result["tx_hash"],
                     "sfo_override": sfo_override
                 })
 
-            if ml_result["integrity_label"] == 1:
+            # Tally
+            if status_str == "COMMITTED":
                 auth_count += 1
-            else:
+            elif status_str == "REJECTED":
                 man_count += 1
+            else:
+                pend_count += 1
 
             results.append({
                 "original_data": record_raw,
-                "verdict": "Authentic" if ml_result["integrity_label"] == 1 else "Manipulated",
-                "decision": ml_result["decision"],
-                "risk_level": ml_result["risk_level"],
-                "data_hash": data_hash,
-                "reasoning": gemini_text,
-                "metadata": {"blockchain_tx": bc_result["tx_hash"]}
+                "verdict":       "Authentic" if ml_result["integrity_label"] == 1 else "Manipulated",
+                "decision":      ml_result["decision"],
+                "risk_level":    ml_result["risk_level"],
+                "confidence_authentic":   ml_result["confidence_authentic"],
+                "confidence_manipulated": ml_result["confidence_manipulated"],
+                "blockchain_action":      ml_result["blockchain_action"],
+                "data_hash":     data_hash,
+                "reasoning":     gemini_text,
+                "metadata": {"blockchain_tx": bc_result["tx_hash"]},
             })
 
         except Exception as e:
-            # Skip rows with heavy parsing errors, or record as failed
-            print(f"Batch row error: {e}")
+            print(f"[BATCH] {row_label} error: {e}")
+            failed_rows.append(f"{row_label}: unexpected error — {e}")
 
     return {
         "summary": {
-            "total_processed": len(results),
-            "authentic": auth_count,
-            "manipulated": man_count
+            "total":          len(results),
+            "authentic":      auth_count,
+            "manipulated":    man_count,
+            "pending":        pend_count,
+            "failed_rows":    len(failed_rows),
+            "failed_details": failed_rows,
         },
         "results": results
     }
+
+

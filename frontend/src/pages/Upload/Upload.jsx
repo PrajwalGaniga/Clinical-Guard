@@ -115,9 +115,31 @@ export default function Upload() {
           </div>
         </div>
 
-        <button className={styles.uploadBtn} disabled={!file || loading} onClick={handleUpload}>
-          {loading ? 'Processing Array...' : 'Run Batch Analysis'}
-        </button>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+          <button className={styles.uploadBtn} disabled={!file || loading} onClick={handleUpload}>
+            {loading ? 'Processing Array...' : 'Run Batch Analysis'}
+          </button>
+          <button
+            className={styles.uploadBtn}
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: 'inherit' }}
+            onClick={() => {
+              const csvContent = [
+                'age,bp_systolic,bp_diastolic,glucose,hr,spo2,diagnosis_encoded,previous_trials,product_experience,last_trial_outcome,health_risk_score,age_grp_adult,age_grp_elderly,trial_id,site_id',
+                '45,120,80,100,75,98,4,1,1,1,0.17,1,0,TR-10001,SITE_001',
+                '52,145,95,180,88,96,2,2,1,0,0.74,1,0,TR-10002,SITE_001',
+                '58,155,98,190,110,93,1,3,2,0,0.00,1,0,TR-10003,SITE_001',
+              ].join('\n');
+              const blob = new Blob([csvContent], { type: 'text/csv' });
+              const url  = URL.createObjectURL(blob);
+              const a    = document.createElement('a');
+              a.href = url; a.download = 'ClinicalGuard_Sample_Template.csv';
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }}
+          >
+            📥 Download Sample CSV Template
+          </button>
+        </div>
       </div>
 
       {loading && (

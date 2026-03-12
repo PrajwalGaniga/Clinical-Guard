@@ -7,9 +7,12 @@ import styles from './ResultCard.module.css';
 export default function ResultCard({ result, recordData }) {
   if (!result) return null;
 
-  const isHighRisk = result.risk_level === 'HIGH';
-  const confidenceAuth = (result.confidence_authentic * 100).toFixed(1);
-  const confidenceMan = (result.confidence_manipulated * 100).toFixed(1);
+  const mlData = result.ml_result || result;
+  const isHighRisk = mlData.risk_level === 'HIGH';
+  const confidenceAuth = (Math.min(mlData.confidence_authentic || 0, 100)).toFixed(1);
+  const confidenceMan = (Math.min(mlData.confidence_manipulated || 0, 100)).toFixed(1);
+  const finalVerdict = result.verdict || mlData.decision || 'UNKNOWN';
+  const riskLvl = mlData.risk_level || 'UNKNOWN';
 
   const getBadgeClass = (level) => {
     switch (level) {
@@ -22,7 +25,7 @@ export default function ResultCard({ result, recordData }) {
 
   const handleDownloadPDF = () => {
     const doc = new jsPDF();
-    const isAuthentic = result.verdict === 'Authentic';
+    const isAuthentic = finalVerdict.toUpperCase() === 'AUTHENTIC';
     const primaryColor = isAuthentic ? [20, 184, 166] : [239, 68, 68];
     const textColor = [200, 200, 200];
     
@@ -60,7 +63,7 @@ export default function ResultCard({ result, recordData }) {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
-    doc.text(result.verdict.toUpperCase(), 105, 205, { align: "center" });
+    doc.text(finalVerdict.toUpperCase(), 105, 205, { align: "center" });
 
     // ------------- PAGE 2: PATIENT RECORD -------------
     doc.addPage();
@@ -102,20 +105,20 @@ export default function ResultCard({ result, recordData }) {
     doc.setTextColor(255, 255, 255);
     doc.text("Machine Learning Analysis & Blockchain", 14, 20);
 
-    const mlData = [
-      ['Final Decision', result.verdict],
-      ['Risk Level', result.risk_level],
+    const mlDataArr = [
+      ['Final Decision', finalVerdict],
+      ['Risk Level', riskLvl],
       ['Authentic Probability', `${confidenceAuth}%`],
       ['Manipulated Probability', `${confidenceMan}%`],
       ['SFO Flag Triggered', result.metadata?.sfo_detected ? 'YES' : 'NO'],
       ['Blockchain Action', result.metadata?.blockchain_status || 'PENDING'],
-      ['Data SHA-256 Hash', result.data_hash || 'N/A'],
-      ['Transaction Hash', result.metadata?.blockchain_tx || 'N/A']
+      ['Data SHA-256 Hash', result.data_hash || result.blockchain?.data_hash || 'N/A'],
+      ['Transaction Hash', result.metadata?.blockchain_tx || result.blockchain?.tx_hash || 'N/A']
     ];
 
     doc.autoTable({
       startY: 30,
-      body: mlData,
+      body: mlDataArr,
       theme: 'grid',
       bodyStyles: { fillColor: [15, 17, 23], textColor: [200, 200, 200] },
       alternateRowStyles: { fillColor: [20, 24, 36] },
@@ -149,11 +152,11 @@ export default function ResultCard({ result, recordData }) {
       <div className={styles.topSection}>
         <div className={styles.verdictArea}>
           <div className={styles.label}>Final Verdict</div>
-          <div className={`${styles.verdictValue} ${result.verdict === 'Authentic' ? styles.verdictAuthentic : styles.verdictManipulated}`}>
-            {result.verdict.toUpperCase()}
+          <div className={`${styles.verdictValue} ${finalVerdict.toUpperCase() === 'AUTHENTIC' ? styles.verdictAuthentic : styles.verdictManipulated}`}>
+            {finalVerdict.toUpperCase()}
           </div>
-          <div className={`${styles.badge} ${getBadgeClass(result.risk_level)}`}>
-            {result.risk_level} RISK
+          <div className={`${styles.badge} ${getBadgeClass(riskLvl)}`}>
+            {riskLvl} RISK
           </div>
         </div>
         <button className={styles.downloadBtn} onClick={handleDownloadPDF}>
@@ -165,14 +168,14 @@ export default function ResultCard({ result, recordData }) {
         <div className={styles.barGroup}>
           <span className={styles.barLabel}>Authentic</span>
           <div className={styles.barBg}>
-            <div className={styles.barFill} style={{ width: `${confidenceAuth}%`, backgroundColor: 'var(--accent-teal)' }}></div>
+            <div className={styles.barFill} style={{ width: `${Math.min(confidenceAuth, 100)}%`, backgroundColor: 'var(--accent-teal)' }}></div>
           </div>
           <span className={styles.valPercent}>{confidenceAuth}%</span>
         </div>
         <div className={styles.barGroup}>
           <span className={styles.barLabel}>Manipulated</span>
           <div className={styles.barBg}>
-            <div className={styles.barFill} style={{ width: `${confidenceMan}%`, backgroundColor: 'var(--accent-red)' }}></div>
+            <div className={styles.barFill} style={{ width: `${Math.min(confidenceMan, 100)}%`, backgroundColor: 'var(--accent-red)' }}></div>
           </div>
           <span className={styles.valPercent}>{confidenceMan}%</span>
         </div>
