@@ -1,0 +1,15 @@
+[
+  "age",
+  "bp_systolic",
+  "bp_diastolic",
+  "glucose",
+  "hr",
+  "spo2",
+  "diagnosis_encoded",
+  "previous_trials",
+  "product_experience",
+  "last_trial_outcome",
+  "health_risk_score",
+  "age_grp_adult",
+  "age_grp_elderly"
+]

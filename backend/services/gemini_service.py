@@ -12,9 +12,8 @@ _DIAGNOSIS_MAP = {
     4: "None / Healthy",
 }
 
-# Fallback API keys — tries primary first, then backup
-_PRIMARY_KEY  = settings.GEMINI_API_KEY
-_FALLBACK_KEY = "AIzaSyCKGK8IwzbpkCLyPOjsd80Py0Va5CdqXXo"
+# API key from .env — set GEMINI_API_KEY in backend/.env
+_API_KEY = settings.GEMINI_API_KEY
 
 
 def _build_prompt(record: dict, ml_result: dict) -> str:
@@ -72,42 +71,34 @@ Write for a hospital doctor. Be precise, clinical, and actionable.
 
 def generate_reasoning(record: dict, ml_result: dict) -> str:
     """
-    Use Gemini 2.5 Flash to generate a dynamic, contextual explanation
-    of the ML verdict for a hospital physician.
-    This function intentionally has NO caching — every call generates fresh output.
+    Use Gemini to generate a contextual explanation of the ML verdict.
+    Returns an honest error message if the API key is not configured
+    or if the API call fails. No silent fallback, no hidden keys.
     """
-    prompt = _build_prompt(record, ml_result)
+    if not _API_KEY:
+        print("[GEMINI] GEMINI_API_KEY not set — AI reasoning unavailable.")
+        return "AI reasoning unavailable: GEMINI_API_KEY not configured in backend/.env."
 
-    # Print full prompt to terminal for verification / debugging
+    prompt = _build_prompt(record, ml_result)
     print("\n" + "="*60)
     print("[GEMINI] Sending prompt:")
     print(prompt[:500] + "..." if len(prompt) > 500 else prompt)
     print("="*60 + "\n")
 
-    def _try_key(api_key: str) -> str | None:
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(prompt)
-            return response.text.strip()
-        except Exception:
+    try:
+        genai.configure(api_key=_API_KEY)
+        # Try Gemini 2.5 Flash first, fall back to 1.5 Flash (same key, newer model may not be on all accounts)
+        for model_name in ("gemini-2.5-flash", "gemini-1.5-flash"):
             try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel(model_name)
                 response = model.generate_content(prompt)
                 return response.text.strip()
-            except Exception as e:
-                print(f"[GEMINI] Key failed: {e}")
-                return None
-
-    # Try primary key
-    if _PRIMARY_KEY:
-        result = _try_key(_PRIMARY_KEY)
-        if result:
-            return result
-
-    # Try fallback key
-    result = _try_key(_FALLBACK_KEY)
-    if result:
-        return result
-
-    return "AI reasoning temporarily unavailable."
+            except Exception as model_err:
+                print(f"[GEMINI] Model {model_name} failed: {model_err}")
+                continue
+        # Both models failed
+        print("[GEMINI] All model attempts failed.")
+        return "AI reasoning temporarily unavailable: Gemini API returned an error."
+    except Exception as e:
+        print(f"[GEMINI] Fatal error: {e}")
+        return "AI reasoning temporarily unavailable: Gemini API returned an error."

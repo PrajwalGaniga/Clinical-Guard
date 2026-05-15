@@ -5,6 +5,7 @@ from bson import ObjectId
 from ..database import get_database
 from ..auth_utils import get_current_user
 from ..services import ml_service, hash_service, gemini_service, blockchain_service
+from ..services.blockchain_service import BlockchainSubmissionError
 
 router = APIRouter(prefix="/predict", tags=["Predict"])
 
@@ -90,24 +91,44 @@ async def predict_single(
     # 5️⃣ Call Gemini AI Reasoning
     gemini_text = gemini_service.generate_reasoning(record, ml_result)
 
-    # 6️⃣ Call Blockchain
-    bc_result = blockchain_service.submit_to_blockchain(
-        data_hash=data_hash,
-        label=ml_result["integrity_label"],
-        confidence=ml_result["confidence_authentic"] / 100,
-        risk=ml_result["risk_level"],
-        trial_id=payload.trial_id,
-        site_id=payload.site_id,
-    )
+    # 6️⃣ Call Blockchain — failures produce PENDING_CHAIN_CONFIRMATION, not silent success
+    blockchain_failed = False
+    blockchain_error_msg = None
+    try:
+        bc_result = blockchain_service.submit_to_blockchain(
+            data_hash=data_hash,
+            label=ml_result["integrity_label"],
+            confidence=ml_result["confidence_authentic"] / 100,
+            risk=ml_result["risk_level"],
+            trial_id=payload.trial_id,
+            site_id=payload.site_id,
+        )
+    except BlockchainSubmissionError as bc_err:
+        print(f"[PREDICT] Blockchain submission failed: {bc_err}")
+        blockchain_failed = True
+        blockchain_error_msg = str(bc_err)
+        bc_result = {
+            "tx_hash":      None,
+            "block_number": None,
+            "network":      "UNAVAILABLE",
+            "status":       "PENDING_CHAIN_CONFIRMATION",
+            "stub_mode":    False,
+        }
 
     # 7️⃣ Determine status and Save to MongoDB
-    action = ml_result["blockchain_action"]
-    if action == "COMMIT_TRANSACTION":
-        status_str = "COMMITTED"
-    elif action == "REJECT_TRANSACTION":
-        status_str = "REJECTED"
+    if blockchain_failed:
+        status_str = "PENDING_CHAIN_CONFIRMATION"
     else:
-        status_str = "PENDING_REVIEW"
+        action = ml_result["blockchain_action"]
+        if bc_result.get("stub_mode"):
+            # Stub mode: never mark as COMMITTED regardless of ML action
+            status_str = "STUB_PENDING"
+        elif action == "COMMIT_TRANSACTION" and bc_result.get("status") == "COMMITTED":
+            status_str = "COMMITTED"
+        elif action == "REJECT_TRANSACTION":
+            status_str = "REJECTED"
+        else:
+            status_str = "PENDING_REVIEW"
 
     doc = {
         "trial_id":      payload.trial_id,
@@ -119,11 +140,14 @@ async def predict_single(
         "ml_result":     ml_result,
         "gemini_reasoning": gemini_text,
         "blockchain": {
-            "data_hash":    data_hash,
-            "tx_hash":      bc_result["tx_hash"],
-            "block_number": bc_result["block_number"],
-            "network":      bc_result["network"],
-            "committed":    status_str == "COMMITTED",
+            "data_hash":       data_hash,
+            "tx_hash":         bc_result["tx_hash"],
+            "block_number":    bc_result["block_number"],
+            "network":         bc_result["network"],
+            "chain_status":    bc_result["status"],
+            "stub_mode":       bc_result.get("stub_mode", False),
+            "committed":       status_str == "COMMITTED",
+            "failure_reason":  blockchain_error_msg,
         },
         "status": status_str,
     }
@@ -146,13 +170,17 @@ async def predict_single(
             "sfo_override": sfo_override
         })
 
-    # 9️⃣ Return response
+    # 9️⃣ Return response — include blockchain status honestly
     return {
         **ml_result,
-        "data_hash":        data_hash,
-        "tx_hash":          bc_result["tx_hash"],
-        "gemini_reasoning": gemini_text,
-        "record_id":        record_id,
+        "data_hash":          data_hash,
+        "tx_hash":            bc_result["tx_hash"],
+        "blockchain_status":  bc_result["status"],
+        "blockchain_network": bc_result["network"],
+        "stub_mode":          bc_result.get("stub_mode", False),
+        "gemini_reasoning":   gemini_text,
+        "record_id":          record_id,
+        "record_status":      status_str,
     }
 
 
@@ -265,23 +293,43 @@ async def predict_batch(
             # Gemini reasoning
             gemini_text = gemini_service.generate_reasoning(record, ml_result)
 
-            # Blockchain
-            bc_result = blockchain_service.submit_to_blockchain(
-                data_hash=data_hash,
-                label=ml_result["integrity_label"],
-                confidence=ml_result["confidence_authentic"] / 100,
-                risk=ml_result["risk_level"],
-                trial_id=trial_id,
-                site_id=site_id,
-            )
+            # Blockchain — failures set PENDING_CHAIN_CONFIRMATION, never silent
+            bc_failed_row = False
+            bc_error_row = None
+            try:
+                bc_result = blockchain_service.submit_to_blockchain(
+                    data_hash=data_hash,
+                    label=ml_result["integrity_label"],
+                    confidence=ml_result["confidence_authentic"] / 100,
+                    risk=ml_result["risk_level"],
+                    trial_id=trial_id,
+                    site_id=site_id,
+                )
+            except BlockchainSubmissionError as bc_err:
+                print(f"[BATCH] {row_label} blockchain failed: {bc_err}")
+                bc_failed_row = True
+                bc_error_row = str(bc_err)
+                bc_result = {
+                    "tx_hash":      None,
+                    "block_number": None,
+                    "network":      "UNAVAILABLE",
+                    "status":       "PENDING_CHAIN_CONFIRMATION",
+                    "stub_mode":    False,
+                }
 
             # MongoDB save
-            action = ml_result["blockchain_action"]
-            status_str = (
-                "COMMITTED"     if action == "COMMIT_TRANSACTION"  else
-                "REJECTED"      if action == "REJECT_TRANSACTION"  else
-                "PENDING_REVIEW"
-            )
+            if bc_failed_row:
+                status_str = "PENDING_CHAIN_CONFIRMATION"
+            else:
+                action = ml_result["blockchain_action"]
+                if bc_result.get("stub_mode"):
+                    status_str = "STUB_PENDING"
+                elif action == "COMMIT_TRANSACTION" and bc_result.get("status") == "COMMITTED":
+                    status_str = "COMMITTED"
+                elif action == "REJECT_TRANSACTION":
+                    status_str = "REJECTED"
+                else:
+                    status_str = "PENDING_REVIEW"
 
             doc = {
                 "trial_id":     trial_id,
@@ -293,11 +341,14 @@ async def predict_batch(
                 "ml_result":    ml_result,
                 "gemini_reasoning": gemini_text,
                 "blockchain": {
-                    "data_hash":    data_hash,
-                    "tx_hash":      bc_result["tx_hash"],
-                    "block_number": bc_result["block_number"],
-                    "network":      bc_result["network"],
-                    "committed":    status_str == "COMMITTED",
+                    "data_hash":      data_hash,
+                    "tx_hash":        bc_result["tx_hash"],
+                    "block_number":   bc_result["block_number"],
+                    "network":        bc_result["network"],
+                    "chain_status":   bc_result["status"],
+                    "stub_mode":      bc_result.get("stub_mode", False),
+                    "committed":      status_str == "COMMITTED",
+                    "failure_reason": bc_error_row,
                 },
                 "status": status_str,
             }

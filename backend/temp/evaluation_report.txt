@@ -1,0 +1,40 @@
+ClinicalGuard — Model Evaluation Report
+=======================================================
+Dataset: clinicalguard_realistic_dataset.csv
+Train rows: 7000 | Test rows: 3000
+Class balance: {0: np.int64(4000), 1: np.int64(6000)}
+
+Model: Decision Tree (DT)
+  Accuracy       : 98.07%
+  ROC-AUC        : 0.9865
+  MANIP Recall   : 100.00%
+  MANIP Precision: 95.39%
+  MANIP F1       : 97.64%
+  AUTH  Recall   : 96.78%
+  FP (dangerous) : 0
+  FN (nuisance)  : 58
+  PASS >=85% recall: YES
+
+Model: Random Forest (RF)
+  Accuracy       : 99.20%
+  ROC-AUC        : 0.9997
+  MANIP Recall   : 100.00%
+  MANIP Precision: 98.04%
+  MANIP F1       : 99.01%
+  AUTH  Recall   : 98.67%
+  FP (dangerous) : 0
+  FN (nuisance)  : 24
+  PASS >=85% recall: YES
+
+Model: XGBoost (XGB)
+  Accuracy       : 99.83%
+  ROC-AUC        : 0.9999
+  MANIP Recall   : 100.00%
+  MANIP Precision: 99.59%
+  MANIP F1       : 99.79%
+  AUTH  Recall   : 99.72%
+  FP (dangerous) : 0
+  FN (nuisance)  : 5
+  PASS >=85% recall: YES
+
+Winner (best MANIP recall): Decision Tree (DT)

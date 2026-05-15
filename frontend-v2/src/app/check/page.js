@@ -276,7 +276,7 @@ export default function SingleCheckPage() {
             {error && <div style={{ color: 'var(--accent-red)', marginBottom: 16 }}>{error}</div>}
             
             <button className={styles.submitBtn} type="submit" disabled={loading}>
-              {loading ? 'Analyzing Data & Anchoring to Polygon...' : 'Run Integrity Check'}
+              {loading ? 'Running Integrity Analysis...' : 'Run Integrity Check'}
             </button>
           </form>
         </div>
